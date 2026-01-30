@@ -30,6 +30,7 @@ use MintsoftSync\MintsoftClient;
 use MintsoftSync\OrderMapper;
 use MintsoftSync\Queue;
 use MintsoftSync\RateLimiter;
+use MintsoftSync\SerialValidator;
 use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
 use Predis\Client as RedisClient;
@@ -68,6 +69,7 @@ $mintsoftClient = new MintsoftClient($config['mintsoft'], $rateLimiter, $errorLo
 $database = new Database($config['database']);
 $queue = new Queue($redis, '');
 $mapper = new OrderMapper();
+$serialValidator = new SerialValidator($config['database'], $errorLogger);
 
 $localLogger->info('Worker started, waiting for jobs...');
 
@@ -101,6 +103,7 @@ while (!$shutdown) {
         $mintsoftOrderId = $payload['mintsoft_order_id'];
         $localOrderId = $payload['local_order_id'];
         $orderNumber = $payload['order_number'] ?? 'unknown';
+        $externalOrderRef = $payload['external_order_reference'] ?? $orderNumber;
 
         $localLogger->info('Processing order for serials', [
             'mintsoft_order_id' => $mintsoftOrderId,
@@ -142,9 +145,34 @@ while (!$shutdown) {
             $verifiedItems = $mintsoftClient->getBarcodeVerifiedOrderItems($mintsoftOrderId);
 
             $serialCount = 0;
+            $validationErrors = 0;
             foreach ($verifiedItems as $verifiedItem) {
                 $serialData = $mapper->mapSerial($verifiedItem);
-                
+
+                // Skip if no serial number
+                if (empty($serialData['serial_number'])) {
+                    continue;
+                }
+
+                // Validate serial against VL database
+                $validation = $serialValidator->validateSerial(
+                    $serialData['serial_number'],
+                    $serialData['sku'] ?? '',
+                    $externalOrderRef,
+                    $orderNumber
+                );
+
+                if (!$validation['valid']) {
+                    $localLogger->warning('Serial validation failed', [
+                        'serial' => $serialData['serial_number'],
+                        'sku' => $serialData['sku'] ?? '',
+                        'order' => $orderNumber,
+                        'error' => $validation['error'],
+                    ]);
+                    $validationErrors++;
+                    // Continue processing - still insert to Mintsoft tables for tracking
+                }
+
                 // Try to find the matching order line
                 $orderLineId = null;
                 if (!empty($serialData['sku'])) {
@@ -165,6 +193,7 @@ while (!$shutdown) {
             $localLogger->info('Processed serials for order', [
                 'mintsoft_order_id' => $mintsoftOrderId,
                 'serial_count' => $serialCount,
+                'validation_errors' => $validationErrors,
             ]);
 
             // Record successful serial sync

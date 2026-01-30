@@ -119,6 +119,7 @@ try {
                 'mintsoft_order_id' => $orderData['mintsoft_id'],
                 'local_order_id' => $orderId,
                 'order_number' => $orderData['order_number'],
+                'external_order_reference' => $orderData['external_order_reference'] ?? $orderData['order_number'],
             ]);
             $queuedForSerials++;
 

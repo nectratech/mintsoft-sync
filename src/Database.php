@@ -45,8 +45,11 @@ class Database
 
     /**
      * Sanitise a value - convert arrays to JSON string, ensure scalar types.
+     *
+     * @param mixed $value
+     * @return mixed
      */
-    private function sanitise(mixed $value): mixed
+    private function sanitise($value)
     {
         if (is_array($value)) {
             return json_encode($value);

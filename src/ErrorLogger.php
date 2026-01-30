@@ -72,7 +72,9 @@ class ErrorLogger
     public function log(string $level, string $message, array $context = []): void
     {
         // Always log locally first
-        $this->localLogger?->log($this->mapLevel($level), $message, $context);
+        if ($this->localLogger !== null) {
+            $this->localLogger->log($this->mapLevel($level), $message, $context);
+        }
 
         // Send to remote error hub
         $payload = [
@@ -96,10 +98,12 @@ class ErrorLogger
             ]);
         } catch (GuzzleException $e) {
             // Log locally if remote fails - don't throw, we don't want logging to break the app
-            $this->localLogger?->error('Failed to send to ErrorHub: ' . $e->getMessage(), [
-                'original_message' => $message,
-                'original_level' => $level,
-            ]);
+            if ($this->localLogger !== null) {
+                $this->localLogger->error('Failed to send to ErrorHub: ' . $e->getMessage(), [
+                    'original_message' => $message,
+                    'original_level' => $level,
+                ]);
+            }
         }
     }
 
@@ -115,16 +119,25 @@ class ErrorLogger
 
     private function mapLevel(string $level): int
     {
-        return match (strtoupper($level)) {
-            'EMERGENCY' => Logger::EMERGENCY,
-            'ALERT' => Logger::ALERT,
-            'CRITICAL' => Logger::CRITICAL,
-            'ERROR' => Logger::ERROR,
-            'WARNING' => Logger::WARNING,
-            'NOTICE' => Logger::NOTICE,
-            'INFO' => Logger::INFO,
-            'DEBUG' => Logger::DEBUG,
-            default => Logger::INFO,
-        };
+        switch (strtoupper($level)) {
+            case 'EMERGENCY':
+                return Logger::EMERGENCY;
+            case 'ALERT':
+                return Logger::ALERT;
+            case 'CRITICAL':
+                return Logger::CRITICAL;
+            case 'ERROR':
+                return Logger::ERROR;
+            case 'WARNING':
+                return Logger::WARNING;
+            case 'NOTICE':
+                return Logger::NOTICE;
+            case 'INFO':
+                return Logger::INFO;
+            case 'DEBUG':
+                return Logger::DEBUG;
+            default:
+                return Logger::INFO;
+        }
     }
 }

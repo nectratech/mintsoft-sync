@@ -142,11 +142,20 @@ class OrderMapper
     {
         return [
             'order_line_id' => $orderLineId,
-            'serial_number' => $mintsoftSerial['SerialNumber'] ?? $mintsoftSerial['Serial'] ?? null,
+            'serial_number' => $mintsoftSerial['SerialNo'] ?? $mintsoftSerial['SerialNumber'] ?? $mintsoftSerial['Serial'] ?? null,
             'barcode' => $mintsoftSerial['Barcode'] ?? $mintsoftSerial['ItemBarcode'] ?? null,
-            'product_id' => $mintsoftSerial['ProductId'] ?? null,
+            'product_id' => $mintsoftSerial['ProductId'] ?? $mintsoftSerial['ProductInLocationId'] ?? null,
             'sku' => $mintsoftSerial['SKU'] ?? $mintsoftSerial['Sku'] ?? null,
-            'verified_at' => $this->parseDate($mintsoftSerial['VerifiedDate'] ?? $mintsoftSerial['DateVerified'] ?? null),
+            'batch_no' => $mintsoftSerial['BatchNo'] ?? null,
+            'expiry_date' => $this->parseDate($mintsoftSerial['ExpiryDate'] ?? null),
+            'box_number' => $mintsoftSerial['BoxNumber'] ?? null,
+            'sscc_number' => $mintsoftSerial['SSCCNumber'] ?? null,
+            'verified_at' => $this->parseDate(
+                $mintsoftSerial['LastUpdated']
+                    ?? $mintsoftSerial['VerifiedDate']
+                    ?? $mintsoftSerial['DateVerified']
+                    ?? null
+            ),
         ];
     }
 

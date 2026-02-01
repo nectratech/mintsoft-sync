@@ -210,25 +210,35 @@ class Database
     }
 
     /**
-     * Insert a serial record, ignoring duplicates.
-     * Uses INSERT IGNORE to skip duplicate entries based on (order_id, serial_number) unique constraint.
+     * Insert or update a serial record based on (order_id, serial_number).
      *
      * @param int $orderId The order's mintsoft_id (now the PK)
      * @param int|null $orderLineId The line's mintsoft_line_id (now the PK), or null if not available
      * @param array $serial The serial data
-     * @return int The inserted ID, or 0 if ignored as duplicate
+     * @return int The inserted ID, or 0 if updated (driver-dependent)
      */
     public function insertSerial(int $orderId, ?int $orderLineId, array $serial): int
     {
         $table = $this->table('serials');
 
-        $sql = "INSERT IGNORE INTO {$table} (
+        $sql = "INSERT INTO {$table} (
             order_id, order_line_id, serial_number, barcode,
-            product_id, sku, verified_at, created_at
+            product_id, sku, batch_no, expiry_date, box_number,
+            sscc_number, verified_at, created_at
         ) VALUES (
             :order_id, :order_line_id, :serial_number, :barcode,
-            :product_id, :sku, :verified_at, NOW()
-        )";
+            :product_id, :sku, :batch_no, :expiry_date, :box_number,
+            :sscc_number, :verified_at, NOW()
+        ) ON DUPLICATE KEY UPDATE
+            order_line_id = VALUES(order_line_id),
+            barcode = VALUES(barcode),
+            product_id = VALUES(product_id),
+            sku = VALUES(sku),
+            batch_no = VALUES(batch_no),
+            expiry_date = VALUES(expiry_date),
+            box_number = VALUES(box_number),
+            sscc_number = VALUES(sscc_number),
+            verified_at = VALUES(verified_at)";
 
         $stmt = $this->pdo->prepare($sql);
         $stmt->execute($this->sanitiseAll([
@@ -238,10 +248,14 @@ class Database
             'barcode' => $serial['barcode'] ?? null,
             'product_id' => $serial['product_id'] ?? null,
             'sku' => $serial['sku'] ?? null,
+            'batch_no' => $serial['batch_no'] ?? null,
+            'expiry_date' => $serial['expiry_date'] ?? null,
+            'box_number' => $serial['box_number'] ?? null,
+            'sscc_number' => $serial['sscc_number'] ?? null,
             'verified_at' => $serial['verified_at'] ?? null,
         ]));
 
-        // Returns 0 if the row was ignored (duplicate)
+        // Returns 0 if the row was updated (driver-dependent)
         return (int) $this->pdo->lastInsertId();
     }
 

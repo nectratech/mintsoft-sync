@@ -78,6 +78,10 @@ CREATE TABLE IF NOT EXISTS serials (
     barcode VARCHAR(255) NULL,
     product_id INT UNSIGNED NULL,
     sku VARCHAR(100) NULL,
+    batch_no VARCHAR(255) NULL,
+    expiry_date DATETIME NULL,
+    box_number INT UNSIGNED NULL,
+    sscc_number VARCHAR(255) NULL,
     verified_at DATETIME NULL,
     created_at DATETIME NOT NULL,
     

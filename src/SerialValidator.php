@@ -60,11 +60,11 @@ class SerialValidator
         // Normalize SKU - ensure it has IKO- prefix for VL lookup
         $vlSku = $this->normalizeSkuForVL($sku);
 
-        // Check if serial exists in VL database
+        // Check if serial exists in VL database (query by serial only - serials are unique)
         $stmt = $this->pdo->prepare(
-            "SELECT status, SKU FROM serialNumbers WHERE serial = ? AND SKU = ?"
+            "SELECT status, SKU FROM serialNumbers WHERE serial = ?"
         );
-        $stmt->execute([$serialNumber, $vlSku]);
+        $stmt->execute([$serialNumber]);
         $row = $stmt->fetch();
 
         if (!$row) {
@@ -88,9 +88,9 @@ class SerialValidator
             ];
         }
 
-        // Serial is valid - optionally allocate it to this order
+        // Serial is valid - allocate it to this order
         if ($currentStatus === 'Unallocated') {
-            $this->allocateSerial($serialNumber, $vlSku, $orderReference);
+            $this->allocateSerial($serialNumber, $orderReference);
         }
 
         return ['valid' => true, 'error' => null];
@@ -99,12 +99,12 @@ class SerialValidator
     /**
      * Allocate a serial to an order in VL database.
      */
-    private function allocateSerial(string $serialNumber, string $sku, string $orderReference): void
+    private function allocateSerial(string $serialNumber, string $orderReference): void
     {
         $stmt = $this->pdo->prepare(
-            "UPDATE serialNumbers SET status = ? WHERE serial = ? AND SKU = ?"
+            "UPDATE serialNumbers SET status = ? WHERE serial = ?"
         );
-        $stmt->execute([$orderReference, $serialNumber, $sku]);
+        $stmt->execute([$orderReference, $serialNumber]);
 
         $this->logger->info("Allocated serial {$serialNumber} to order {$orderReference}");
     }

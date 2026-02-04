@@ -11,23 +11,54 @@ class Database
 {
     private PDO $pdo;
     private string $prefix;
+    private array $config;
 
     public function __construct(array $config)
     {
+        $this->config = $config;
+        $this->prefix = $config['table_prefix'] ?? '';
+        $this->connect();
+    }
+
+    /**
+     * Establish database connection.
+     */
+    private function connect(): void
+    {
         $dsn = sprintf(
             'mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4',
-            $config['host'],
-            $config['port'],
-            $config['database']
+            $this->config['host'],
+            $this->config['port'],
+            $this->config['database']
         );
 
-        $this->pdo = new PDO($dsn, $config['username'], $config['password'], [
+        $this->pdo = new PDO($dsn, $this->config['username'], $this->config['password'], [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES => false,
         ]);
+    }
 
-        $this->prefix = $config['table_prefix'] ?? '';
+    /**
+     * Check if connection is alive and reconnect if needed.
+     * Call this before operations in long-running processes.
+     */
+    public function ensureConnected(): void
+    {
+        try {
+            $this->pdo->query('SELECT 1');
+        } catch (PDOException $e) {
+            // Connection lost, reconnect
+            $this->connect();
+        }
+    }
+
+    /**
+     * Reconnect to database. Useful for long-running workers.
+     */
+    public function reconnect(): void
+    {
+        $this->connect();
     }
 
     public function getPdo(): PDO

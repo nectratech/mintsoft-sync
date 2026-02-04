@@ -112,6 +112,9 @@ while (!$shutdown) {
             'attempt' => $job['attempts'],
         ]);
 
+        // Ensure database connection is alive (prevents "MySQL server has gone away")
+        $database->ensureConnected();
+
         try {
             // First, fetch order items if we don't have them
             $orderItems = $mintsoftClient->getOrderItems($mintsoftOrderId);

@@ -13,6 +13,7 @@ use PDO;
 class SerialValidator
 {
     private PDO $pdo;
+    private array $dbConfig;
     private ErrorLogger $logger;
     private string $notificationEmail;
     private string $fromEmail;
@@ -23,23 +24,66 @@ class SerialValidator
         string $notificationEmail = 'ttp@lamafulfiment.com',
         string $fromEmail = 'support@virtuallogistics.co.uk'
     ) {
+        $this->dbConfig = $dbConfig;
+        $this->logger = $logger;
+        $this->notificationEmail = $notificationEmail;
+        $this->fromEmail = $fromEmail;
+        $this->connect();
+    }
+
+    /**
+     * Establish database connection.
+     */
+    private function connect(): void
+    {
         // Connect to VL database for serial validation
         $dsn = sprintf(
             'mysql:host=%s;port=%s;dbname=%s;charset=utf8mb4',
-            $dbConfig['host'],
-            $dbConfig['port'],
+            $this->dbConfig['host'],
+            $this->dbConfig['port'],
             'vl' // VL database for serialNumbers table
         );
 
-        $this->pdo = new PDO($dsn, $dbConfig['username'], $dbConfig['password'], [
+        $this->pdo = new PDO($dsn, $this->dbConfig['username'], $this->dbConfig['password'], [
             PDO::ATTR_ERRMODE => PDO::ERRMODE_EXCEPTION,
             PDO::ATTR_DEFAULT_FETCH_MODE => PDO::FETCH_ASSOC,
             PDO::ATTR_EMULATE_PREPARES => false,
         ]);
+    }
 
-        $this->logger = $logger;
-        $this->notificationEmail = $notificationEmail;
-        $this->fromEmail = $fromEmail;
+    /**
+     * Check if connection is alive and reconnect if needed.
+     */
+    public function ensureConnected(): void
+    {
+        try {
+            $this->pdo->getAttribute(PDO::ATTR_SERVER_INFO);
+        } catch (\PDOException $e) {
+            $this->connect();
+        }
+    }
+
+    /**
+     * Execute a prepared statement with automatic retry on connection errors.
+     */
+    private function executeWithRetry(string $sql, array $params = [])
+    {
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+            return $stmt;
+        } catch (\PDOException $e) {
+            if (strpos($e->getMessage(), 'gone away') !== false ||
+                strpos($e->getMessage(), 'Lost connection') !== false ||
+                $e->getCode() === 'HY000') {
+
+                $this->connect();
+                $stmt = $this->pdo->prepare($sql);
+                $stmt->execute($params);
+                return $stmt;
+            }
+            throw $e;
+        }
     }
 
     /**
@@ -61,10 +105,10 @@ class SerialValidator
         $vlSku = $this->normalizeSkuForVL($sku);
 
         // Check if serial exists in VL database (query by serial only - serials are unique)
-        $stmt = $this->pdo->prepare(
-            "SELECT status, SKU FROM serialNumbers WHERE serial = ?"
+        $stmt = $this->executeWithRetry(
+            "SELECT status, SKU FROM serialNumbers WHERE serial = ?",
+            [$serialNumber]
         );
-        $stmt->execute([$serialNumber]);
         $row = $stmt->fetch();
 
         if (!$row) {
@@ -101,10 +145,10 @@ class SerialValidator
      */
     private function allocateSerial(string $serialNumber, string $orderReference): void
     {
-        $stmt = $this->pdo->prepare(
-            "UPDATE serialNumbers SET status = ? WHERE serial = ?"
+        $this->executeWithRetry(
+            "UPDATE serialNumbers SET status = ? WHERE serial = ?",
+            [$orderReference, $serialNumber]
         );
-        $stmt->execute([$orderReference, $serialNumber]);
 
         $this->logger->info("Allocated serial {$serialNumber} to order {$orderReference}");
     }

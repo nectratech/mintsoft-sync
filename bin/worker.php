@@ -112,8 +112,9 @@ while (!$shutdown) {
             'attempt' => $job['attempts'],
         ]);
 
-        // Ensure database connection is alive (prevents "MySQL server has gone away")
+        // Ensure database connections are alive (prevents "MySQL server has gone away")
         $database->ensureConnected();
+        $serialValidator->ensureConnected();
 
         try {
             // First, fetch order items if we don't have them

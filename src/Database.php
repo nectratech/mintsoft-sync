@@ -46,10 +46,42 @@ class Database
     public function ensureConnected(): void
     {
         try {
-            $this->pdo->query('SELECT 1');
+            // Try to ping the connection
+            $this->pdo->getAttribute(PDO::ATTR_SERVER_INFO);
         } catch (PDOException $e) {
             // Connection lost, reconnect
             $this->connect();
+        }
+    }
+
+    /**
+     * Execute a prepared statement with automatic retry on connection errors.
+     *
+     * @param string $sql The SQL query
+     * @param array $params Parameters to bind
+     * @return \PDOStatement
+     */
+    private function executeWithRetry(string $sql, array $params = [])
+    {
+        try {
+            $stmt = $this->pdo->prepare($sql);
+            $stmt->execute($params);
+            return $stmt;
+        } catch (PDOException $e) {
+            // Check if it's a "gone away" or "lost connection" error
+            if (strpos($e->getMessage(), 'gone away') !== false ||
+                strpos($e->getMessage(), 'Lost connection') !== false ||
+                $e->getCode() === 'HY000') {
+
+                // Reconnect and retry once
+                $this->connect();
+                $stmt = $this->pdo->prepare($sql);
+                $stmt->execute($params);
+                return $stmt;
+            }
+
+            // Re-throw if it's not a connection error
+            throw $e;
         }
     }
 
@@ -224,8 +256,7 @@ class Database
             line_total = VALUES(line_total),
             updated_at = NOW()";
 
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($this->sanitiseAll([
+        $this->executeWithRetry($sql, $this->sanitiseAll([
             'order_id' => $orderId,
             'mintsoft_line_id' => $line['mintsoft_line_id'],
             'product_id' => $line['product_id'] ?? null,
@@ -271,8 +302,7 @@ class Database
             sscc_number = VALUES(sscc_number),
             verified_at = VALUES(verified_at)";
 
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute($this->sanitiseAll([
+        $this->executeWithRetry($sql, $this->sanitiseAll([
             'order_id' => $orderId,
             'order_line_id' => $orderLineId,
             'serial_number' => $serial['serial_number'] ?? null,
@@ -328,10 +358,9 @@ class Database
     public function recordSyncRun(string $type, int $itemsProcessed, ?string $error = null): void
     {
         $table = $this->table('sync_log');
-        $sql = "INSERT INTO {$table} (sync_type, items_processed, error_message, created_at) 
+        $sql = "INSERT INTO {$table} (sync_type, items_processed, error_message, created_at)
                 VALUES (?, ?, ?, NOW())";
-        $stmt = $this->pdo->prepare($sql);
-        $stmt->execute([$type, $itemsProcessed, $error]);
+        $this->executeWithRetry($sql, [$type, $itemsProcessed, $error]);
     }
 
     /**

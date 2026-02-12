@@ -22,6 +22,9 @@ use MintsoftSync\Queue;
 use MintsoftSync\RateLimiter;
 use Monolog\Handler\StreamHandler;
 use Monolog\Logger;
+use PHPMailer\PHPMailer\PHPMailer;
+use PHPMailer\PHPMailer\SMTP;
+use PHPMailer\PHPMailer\Exception as PHPMailerException;
 use Predis\Client as RedisClient;
 
 // Load config
@@ -39,39 +42,52 @@ $errorLogger = new ErrorLogger($config['error_hub'], $localLogger);
 // Email notification settings
 // ============================================
 $notificationEmail = 'support@lamafulfilment.com';
-$fromEmail = 'mintsoft-sync@lamafulfilment.com';
 
 /**
- * Send an email notification for external reference issues.
+ * Send an email notification for external reference issues via SMTP.
  */
 function sendExternalRefNotification(
     string $subject,
     string $body,
     string $toEmail,
-    string $fromEmail,
+    array $mailConfig,
     ErrorLogger $errorLogger
 ): void {
     try {
-        $headers = [
-            'From' => $fromEmail,
-            'Reply-To' => $fromEmail,
-            'X-Mailer' => 'MintsoftSync/1.0',
-            'Content-Type' => 'text/plain; charset=UTF-8',
-        ];
+        $mail = new PHPMailer(true);
 
-        $headerString = '';
-        foreach ($headers as $key => $value) {
-            $headerString .= "{$key}: {$value}\r\n";
+        // SMTP settings
+        $mail->isSMTP();
+        $mail->Host = $mailConfig['host'];
+        $mail->Port = (int) $mailConfig['port'];
+        $mail->SMTPAuth = true;
+        $mail->Username = $mailConfig['username'];
+        $mail->Password = $mailConfig['password'];
+
+        // Encryption
+        if ($mailConfig['encryption'] === 'ssl') {
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_SMTPS;
+        } elseif ($mailConfig['encryption'] === 'tls') {
+            $mail->SMTPSecure = PHPMailer::ENCRYPTION_STARTTLS;
         }
 
-        $sent = mail($toEmail, $subject, $body, $headerString);
+        // From/To
+        $mail->setFrom($mailConfig['from_address'], $mailConfig['from_name']);
+        $mail->addAddress($toEmail);
 
-        if (!$sent) {
-            $errorLogger->warning('Failed to send notification email', [
-                'to' => $toEmail,
-                'subject' => $subject,
-            ]);
-        }
+        // Content
+        $mail->isHTML(false);
+        $mail->Subject = $subject;
+        $mail->Body = $body;
+
+        $mail->send();
+
+    } catch (PHPMailerException $e) {
+        $errorLogger->warning('Failed to send notification email', [
+            'to' => $toEmail,
+            'subject' => $subject,
+            'error' => $e->getMessage(),
+        ]);
     } catch (\Throwable $e) {
         $errorLogger->warning('Exception sending notification email', [
             'to' => $toEmail,
@@ -244,7 +260,7 @@ try {
                                 $emailSubject,
                                 $emailBody,
                                 $notificationEmail,
-                                $fromEmail,
+                                $config['mail'],
                                 $errorLogger
                             );
 
@@ -284,7 +300,7 @@ try {
                         $emailSubject,
                         $emailBody,
                         $notificationEmail,
-                        $fromEmail,
+                        $config['mail'],
                         $errorLogger
                     );
 

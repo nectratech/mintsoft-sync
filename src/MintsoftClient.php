@@ -129,6 +129,64 @@ class MintsoftClient
     }
 
     /**
+     * Update an order's ExternalOrderReference.
+     *
+     * Returns the full API response including Success flag and any error messages.
+     * Does not throw on API errors - caller should check 'Success' field.
+     *
+     * @param int $orderId The Mintsoft order ID
+     * @param string $externalOrderReference The new external order reference
+     * @return array The API response with Success, Message, etc.
+     */
+    public function updateExternalOrderReference(int $orderId, string $externalOrderReference): array
+    {
+        $this->rateLimiter->wait();
+
+        try {
+            $response = $this->httpClient->post("/api/Order/{$orderId}", [
+                'query' => ['APIKey' => $this->apiKey],
+                'json' => ['ExternalOrderReference' => $externalOrderReference],
+            ]);
+
+            $body = (string) $response->getBody();
+            $data = json_decode($body, true);
+
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                return [
+                    'Success' => false,
+                    'Message' => 'Invalid JSON response: ' . json_last_error_msg(),
+                    'RawResponse' => substr($body, 0, 500),
+                ];
+            }
+
+            return $data ?? ['Success' => true];
+
+        } catch (RequestException $e) {
+            $statusCode = $e->hasResponse() ? $e->getResponse()->getStatusCode() : 0;
+            $responseBody = $e->hasResponse() ? (string) $e->getResponse()->getBody() : '';
+
+            // Try to parse the response body as JSON (Mintsoft returns structured errors)
+            $errorData = json_decode($responseBody, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($errorData)) {
+                return $errorData;
+            }
+
+            return [
+                'Success' => false,
+                'Message' => "HTTP {$statusCode}: " . $e->getMessage(),
+                'StatusCode' => $statusCode,
+                'RawResponse' => substr($responseBody, 0, 500),
+            ];
+
+        } catch (GuzzleException $e) {
+            return [
+                'Success' => false,
+                'Message' => 'Connection error: ' . $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
      * Make an API request with rate limiting and error handling.
      */
     private function request(string $method, string $endpoint, array $params = []): array

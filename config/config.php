@@ -45,4 +45,9 @@ return [
     'sync' => [
         'lookback_minutes' => (int) ($_ENV['SYNC_LOOKBACK_MINUTES'] ?? 30),
     ],
+
+    'ikonic' => [
+        'api_url' => $_ENV['IKONIC_API_URL'] ?? 'https://api.ikonic.com',
+        'api_key' => $_ENV['IKONIC_API_KEY'] ?? '',
+    ],
 ];

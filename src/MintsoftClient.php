@@ -187,6 +187,121 @@ class MintsoftClient
     }
 
     /**
+     * Get products for the configured client.
+     *
+     * @param int $pageNo Page number (1-based)
+     * @param int $limit Number of products per page (max 100)
+     * @return array
+     */
+    public function getProducts(int $pageNo = 1, int $limit = 100): array
+    {
+        return $this->request('GET', '/api/Product/List', [
+            'APIKey' => $this->apiKey,
+            'ClientId' => $this->clientId,
+            'PageNo' => $pageNo,
+            'Limit' => $limit,
+        ]);
+    }
+
+    /**
+     * Get all products for the configured client, handling pagination automatically.
+     *
+     * @return array All products
+     */
+    public function getAllProducts(): array
+    {
+        $allProducts = [];
+        $pageNo = 1;
+        $limit = 100;
+
+        do {
+            $response = $this->getProducts($pageNo, $limit);
+
+            // Handle different response formats
+            $products = [];
+            if (isset($response['Items']) && is_array($response['Items'])) {
+                $products = $response['Items'];
+            } elseif (isset($response['Data']) && is_array($response['Data'])) {
+                $products = $response['Data'];
+            } elseif (is_array($response) && !isset($response['Items']) && !isset($response['Data'])) {
+                $products = $response;
+            }
+
+            if (empty($products)) {
+                break;
+            }
+
+            $allProducts = array_merge($allProducts, $products);
+            $pageNo++;
+
+            // If we got less than limit, we've reached the end
+            if (count($products) < $limit) {
+                break;
+            }
+
+        } while (true);
+
+        return $allProducts;
+    }
+
+    /**
+     * Bulk update on-hand stock levels.
+     *
+     * POST /api/Product/BulkOnHandStockUpdate
+     *
+     * @param array $records Array of stock update records:
+     *                       [['SKU' => 'ABC123', 'WarehouseId' => 9, 'Quantity' => 50], ...]
+     * @return array API response with Success flag
+     */
+    public function bulkUpdateStock(array $records): array
+    {
+        $this->rateLimiter->wait();
+
+        try {
+            $response = $this->httpClient->post('/api/Product/BulkOnHandStockUpdate', [
+                'query' => ['APIKey' => $this->apiKey],
+                'json' => $records,
+            ]);
+
+            $body = (string) $response->getBody();
+            $data = json_decode($body, true);
+
+            if (json_last_error() !== JSON_ERROR_NONE) {
+                return [
+                    'Success' => false,
+                    'Message' => 'Invalid JSON response: ' . json_last_error_msg(),
+                    'RawResponse' => substr($body, 0, 500),
+                ];
+            }
+
+            return $data ?? ['Success' => true];
+
+        } catch (RequestException $e) {
+            $statusCode = $e->hasResponse() ? $e->getResponse()->getStatusCode() : 0;
+            $responseBody = $e->hasResponse() ? (string) $e->getResponse()->getBody() : '';
+
+            // Try to parse the response body as JSON
+            $errorData = json_decode($responseBody, true);
+            if (json_last_error() === JSON_ERROR_NONE && is_array($errorData)) {
+                return $errorData;
+            }
+
+            return [
+                'Success' => false,
+                'Message' => "HTTP {$statusCode}: " . $e->getMessage(),
+                'StatusCode' => $statusCode,
+                'RawResponse' => substr($responseBody, 0, 500),
+            ];
+
+        } catch (GuzzleException $e) {
+            return [
+                'Success' => false,
+                'Message' => 'Connection error: ' . $e->getMessage(),
+            ];
+        }
+    }
+
+    /**
      * Make an API request with rate limiting and error handling.
      */
     private function request(string $method, string $endpoint, array $params = []): array

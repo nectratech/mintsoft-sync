@@ -230,7 +230,7 @@ try {
 
                         } else {
                             // Update failed - log error and send email
-                            $errorMessage = $updateResult['Message'] ?? 'Unknown error';
+                            /*$errorMessage = $updateResult['Message'] ?? 'Unknown error';
 
                             $errorLogger->warning('Failed to update ExternalOrderReference in Mintsoft', [
                                 'mintsoft_id' => $mintsoftId,
@@ -264,7 +264,7 @@ try {
                                 $errorLogger
                             );
 
-                            $externalRefErrors++;
+                            $externalRefErrors++;*/
                         }
                     } else {
                         $localLogger->debug('External reference already correct', [

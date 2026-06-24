@@ -189,8 +189,10 @@ try {
 
             // ============================================
             // Fix ExternalOrderReference via Ikonic API
+            // Skip for Magento channel (ChannelId 14) - ref is already correct
             // ============================================
-            if (!empty($currentExternalRef)) {
+            $channelId = $mintsoftOrder['ChannelId'] ?? null;
+            if (!empty($currentExternalRef) && $channelId != 14) {
                 $localLogger->debug('Looking up correct external ref from Ikonic', [
                     'mintsoft_id' => $mintsoftId,
                     'current_external_ref' => $currentExternalRef,
